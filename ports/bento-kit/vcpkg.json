@@ -1,6 +1,6 @@
 {
   "name": "bento-kit",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Header-only C++ utilities: IDs, random helpers, log redaction",
   "homepage": "https://github.com/imcooder/bento-kit-cpp",
   "license": "MIT",

@@ -2,7 +2,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO imcooder/bento-kit-cpp
     REF "v${VERSION}"
-    SHA512 e8bacd00159b3d9cb993a725e85108460919215a48ebdc4e82b4ddaa553ffa4cb83fc5efafa1b76cff2b4820da7f9cd35a5319894b572e378044204dd11638f9
+    SHA512 19e03685b8ef41a1aa60733aab3a5604bf4d519ff1719a1726816c28f810a7cae7573e6363dcba9db7cf4e5db89a87c90dcac16abb28bf84eb331509dd534aa2
     HEAD_REF main
 )
 
