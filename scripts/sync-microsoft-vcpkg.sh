@@ -114,8 +114,7 @@ find_package(bento-kit CONFIG REQUIRED)
 target_link_libraries(my_app PRIVATE bento::kit)
 \`\`\`
 EOF
-)" \
-    --json url --jq .url)"
+)")"
   echo "Created new PR on ${VCPKG_UPSTREAM_REPO}."
 fi
 
