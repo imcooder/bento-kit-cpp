@@ -12,3 +12,12 @@ export function releaseName(version) {
 export function pkgArchiveName(version) {
   return `${PRODUCT}-${version}`;
 }
+
+/** Git branch that release / vcpkg source tarballs use (e.g. release_0.1). */
+export function releaseBranchFromVersion(version) {
+  const parts = version.split(".");
+  if (parts.length < 2) {
+    throw new Error(`version must be major.minor.patch, got "${version}"`);
+  }
+  return `release_${parts[0]}.${parts[1]}`;
+}

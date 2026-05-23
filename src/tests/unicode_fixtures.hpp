@@ -67,7 +67,9 @@ inline std::string utf8CjkMaskSecretExpected() {
   return makeUtf8(kHead, sizeof(kHead)) + "***" + makeUtf8(kTail, sizeof(kTail));
 }
 
-#ifdef _WIN32
+#include <bento/platform.hpp>
+
+#if BENTO_HAS_WSTRING_MASK
 
 inline std::wstring wideFromScalars(std::initializer_list<char32_t> scalars) {
   std::wstring out;
@@ -108,6 +110,6 @@ inline std::wstring utf16CjkMaskMiddleExpectedWide() {
   return wideFromScalars({0x4E00}) + L"***" + wideFromScalars({0x4E94});
 }
 
-#endif // _WIN32
+#endif // BENTO_HAS_WSTRING_MASK
 
 } // namespace bento::test

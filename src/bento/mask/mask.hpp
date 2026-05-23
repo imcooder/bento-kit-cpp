@@ -1,5 +1,7 @@
 #pragma once
 
+#include <bento/platform.hpp>
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -11,7 +13,7 @@ namespace bento::mask {
 inline std::string maskMiddle(std::string_view s, std::size_t prefix, std::size_t suffix);
 inline std::string maskSecret(std::optional<std::string_view> value, std::size_t keepChars = 3);
 
-#ifdef _WIN32
+#if BENTO_HAS_WSTRING_MASK
 inline std::wstring maskMiddle(std::wstring_view s, std::size_t prefix, std::size_t suffix);
 inline std::wstring maskSecret(std::optional<std::wstring_view> value, std::size_t keepChars = 3);
 #endif
@@ -80,7 +82,7 @@ inline std::size_t utf8CharCount(std::string_view s) {
   return count;
 }
 
-#ifdef _WIN32
+#if BENTO_HAS_WSTRING_MASK
 
 inline constexpr wchar_t kMaskWChar = L'*';
 
@@ -127,7 +129,7 @@ inline std::size_t utf16CharCount(std::wstring_view s) {
   return count;
 }
 
-#endif // _WIN32
+#endif // BENTO_HAS_WSTRING_MASK
 
 } // namespace detail
 
@@ -257,7 +259,7 @@ inline std::string maskMiddle(std::string_view s, std::size_t prefix, std::size_
   return out;
 }
 
-#ifdef _WIN32
+#if BENTO_HAS_WSTRING_MASK
 
 inline std::wstring maskPhone(std::wstring_view phone) {
   if (phone.size() == 11) {
@@ -377,6 +379,6 @@ inline std::wstring maskMiddle(std::wstring_view s, std::size_t prefix, std::siz
   return out;
 }
 
-#endif // _WIN32
+#endif // BENTO_HAS_WSTRING_MASK
 
 } // namespace bento::mask

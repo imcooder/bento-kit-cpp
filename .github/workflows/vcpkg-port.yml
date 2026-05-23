@@ -1,0 +1,57 @@
+name: vcpkg port
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ports/**"
+      - "src/**"
+      - "cmake/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/vcpkg-port.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "ports/**"
+      - "src/**"
+      - "cmake/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/vcpkg-port.yml"
+
+concurrency:
+  group: vcpkg-port-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    name: vcpkg install (${{ matrix.triplet }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triplet: x64-linux
+          - os: ubuntu-24.04-arm
+            triplet: arm64-linux
+          - os: macos-latest
+            triplet: arm64-osx
+          - os: windows-latest
+            triplet: x64-windows
+          - os: windows-latest
+            triplet: arm64-windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "${RUNNER_TEMP}/vcpkg"
+          "${RUNNER_TEMP}/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=${RUNNER_TEMP}/vcpkg" >> "${GITHUB_ENV}"
+
+      - name: Install bento-kit (overlay port)
+        shell: bash
+        run: |
+          "${VCPKG_ROOT}/vcpkg" install bento-kit:${{ matrix.triplet }} \
+            --overlay-ports="${GITHUB_WORKSPACE}/ports"

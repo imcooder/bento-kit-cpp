@@ -48,6 +48,19 @@ ports/         # vcpkg port
 | CMake target | `bento::kit` | `target_link_libraries(my_app PRIVATE bento::kit)` |
 | GitHub repo | `bento-kit-cpp` | unchanged |
 
+### Platform support
+
+| Platform | vcpkg / API | Notes |
+|----------|-------------|-------|
+| Windows desktop | `x64-windows`, `arm64-windows`, static variants | Full API; UTF-8 + `wstring` mask overloads |
+| UWP | not supported | `supports` excludes `uwp` |
+| Linux | `x64-linux`, `arm64-linux` | Full UTF-8 API |
+| macOS | `arm64-osx`, `x64-osx` | Full UTF-8 API |
+| iOS / Android | `ios`, `*-android` | UTF-8 API; RNG falls back if `random_device` is weak |
+| FreeBSD / Emscripten | declared in `supports` | UTF-8 API only |
+
+`BENTO_HAS_WSTRING_MASK` is enabled only on desktop Windows (not UWP). See `src/bento/platform.hpp`.
+
 ## Versioning
 
 **Source of truth:** `package.json` → `"version": "MAJOR.MINOR.PATCH"`.
@@ -230,11 +243,13 @@ The **Build & Release** workflow (`.github/workflows/release.yml`) runs only on 
 
 ```bash
 RELEASE_BRANCH=release_0.1 npm run release:check
-git checkout -b release_0.1
+git push origin main
+git checkout release_0.1 || git checkout -b release_0.1
+git cherry-pick <commit-on-main>   # pick the commit(s) you want to ship
 git push -u origin release_0.1
 ```
 
-3. The workflow creates a GitHub Release titled **`bento-kit v0.1.<run>`**, builds on ubuntu / macOS / Windows, uploads `bento-kit-0.1.<run>.tar.gz`, updates `ports/bento-kit/` on `main`, then finalizes the Release page.
+The workflow creates a GitHub Release titled **`bento-kit v0.1.<run>`**, builds on ubuntu / macOS / Windows, uploads `bento-kit-0.1.<run>.tar.gz`, updates `ports/bento-kit/` on `main` (SHA512 from the **release branch** tarball), then finalizes the Release page. A tag `v0.1.<run>` is still created for the Release page only.
 
 Re-run manually via **Actions -> Build & Release -> Run workflow** — select a `release_*` branch (not `main`).
 

@@ -180,12 +180,12 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Download release tarball
+      - name: Download release branch tarball
         env:
-          TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_BRANCH: ${{ needs.validate.outputs.branch }}
         run: |
           curl -fsSL \
-            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz" \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/heads/${RELEASE_BRANCH}.tar.gz" \
             -o source.tar.gz
 
       - name: Compute SHA512
@@ -227,8 +227,6 @@ jobs:
       pkg_size: ${{ steps.package.outputs.size }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.validate.outputs.tag }}
 
       - uses: actions/setup-node@v4
         with:

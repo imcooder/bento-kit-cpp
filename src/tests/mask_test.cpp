@@ -122,7 +122,7 @@ void testMaskSecretShort() {
 void testMaskSecretSentinels() {
   CHECK_EQ(bento::mask::maskSecret(std::optional<std::string_view>{}, 3), "<none>");
   CHECK_EQ(bento::mask::maskSecret(std::optional<std::string_view>(""), 3), "<empty>");
-#ifdef _WIN32
+#if BENTO_HAS_WSTRING_MASK
   CHECK_EQ(bento::mask::maskSecret(std::optional<std::wstring_view>{}, 3), L"<none>");
   CHECK_EQ(bento::mask::maskSecret(std::optional<std::wstring_view>(L""), 3), L"<empty>");
 #endif
@@ -137,7 +137,7 @@ void testMaskSecretUnicode() {
   CHECK_EQ(bento::mask::maskSecret(std::optional<std::string_view>(input), 2), bento::test::utf8CjkMaskSecretExpected());
 }
 
-#ifdef _WIN32
+#if BENTO_HAS_WSTRING_MASK
 
 void testMaskSecretUnicodeWide() {
   CHECK_EQ(bento::mask::maskSecret(bento::test::utf16CjkDigitsEightWide(), 2), bento::test::utf16CjkMaskSecretExpectedWide());
@@ -194,7 +194,7 @@ int main() {
       {"maskSecret sentinels", testMaskSecretSentinels},
       {"maskSecret keep zero", testMaskSecretKeepZero},
       {"maskSecret unicode", testMaskSecretUnicode},
-#ifdef _WIN32
+#if BENTO_HAS_WSTRING_MASK
       {"maskSecret unicode wide", testMaskSecretUnicodeWide},
       {"maskName two chars wide", testMaskNameTwoCharsWide},
       {"maskMiddle unicode wide", testMaskMiddleUnicodeWide},
