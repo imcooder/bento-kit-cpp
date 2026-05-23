@@ -21,3 +21,8 @@ export function releaseBranchFromVersion(version) {
   }
   return `release_${parts[0]}.${parts[1]}`;
 }
+
+/** Fork used to open PRs against microsoft/vcpkg (override via env). */
+export const VCPKG_FORK_REPO = process.env.VCPKG_FORK_REPO ?? "imcooder/vcpkg";
+export const VCPKG_UPSTREAM_REPO = "microsoft/vcpkg";
+export const VCPKG_PR_BRANCH = "bento-kit-port";

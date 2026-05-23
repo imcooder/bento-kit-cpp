@@ -219,6 +219,35 @@ jobs:
           git push
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+  sync-microsoft-vcpkg:
+    name: Sync microsoft/vcpkg PR
+    needs:
+      - validate
+      - publish-vcpkg
+      - build-ubuntu
+      - build-macos
+      - build-windows
+      - package
+    if: >-
+      needs.validate.result == 'success' &&
+      needs.publish-vcpkg.result == 'success' &&
+      needs.build-ubuntu.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.package.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish-vcpkg.outputs.port_commit }}
+
+      - name: Push port to vcpkg fork and update PR
+        env:
+          VCPKG_FORK_TOKEN: ${{ secrets.VCPKG_FORK_TOKEN }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash scripts/sync-microsoft-vcpkg.sh
+
   package:
     name: Package & Upload
     needs: [validate, create-release, build-ubuntu, build-macos, build-windows]
@@ -277,6 +306,7 @@ jobs:
       - build-macos
       - build-windows
       - publish-vcpkg
+      - sync-microsoft-vcpkg
       - package
     if: always()
     runs-on: ubuntu-latest
@@ -316,6 +346,7 @@ jobs:
             "${{ needs.build-macos.result }}" \
             "${{ needs.build-windows.result }}" \
             "${{ needs.publish-vcpkg.result }}" \
+            "${{ needs.sync-microsoft-vcpkg.result }}" \
             "${{ needs.package.result }}"; do
             if [ "$RESULT" = "failure" ] || [ "$RESULT" = "cancelled" ]; then
               FAILED=true
@@ -329,7 +360,8 @@ jobs:
           echo "| Ubuntu | ${{ needs.build-ubuntu.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| macOS | ${{ needs.build-macos.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Windows | ${{ needs.build-windows.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| vcpkg port | ${{ needs.publish-vcpkg.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| vcpkg port (this repo) | ${{ needs.publish-vcpkg.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| microsoft/vcpkg PR | ${{ needs.sync-microsoft-vcpkg.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| package upload | ${{ needs.package.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**[→ Release Page](${{ needs.validate.outputs.release_url }})**" >> "$GITHUB_STEP_SUMMARY"

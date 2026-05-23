@@ -232,7 +232,32 @@ To appear in [https://vcpkg.io](https://vcpkg.io) and `vcpkg search` without a c
 
 The vcpkg port and CMake package are both **`bento-kit`**; link with target **`bento::kit`**.
 
-Each new GitHub Release still updates `ports/` on `main` here automatically; you (or a bot) still need a **follow-up PR to microsoft/vcpkg** per version to update the public index.
+Each new GitHub Release updates `ports/` on `main` here automatically. To also sync your **microsoft/vcpkg** fork and open/update the upstream PR, configure **`VCPKG_FORK_TOKEN`** (see below).
+
+#### Automate the microsoft/vcpkg PR (optional)
+
+After you [fork microsoft/vcpkg](https://github.com/microsoft/vcpkg), add a repository secret on **bento-kit-cpp**:
+
+| Secret | Value |
+|--------|--------|
+| `VCPKG_FORK_TOKEN` | GitHub PAT (classic) with **`repo`** scope, able to push to `imcooder/vcpkg` and open PRs |
+
+Each successful **Build & Release** run will then:
+
+1. Copy `ports/bento-kit/` to your fork branch `bento-kit-port` (rebased on `microsoft/vcpkg` `master`)
+2. Run `./vcpkg install bento-kit:x64-linux` and `x-add-version`
+3. Push to **`imcooder/vcpkg`**
+4. **Create** a PR to `microsoft/vcpkg`, or **update** the existing open PR
+
+If the secret is not set, this step is skipped (custom registry in this repo still works).
+
+Manual one-off sync from your machine:
+
+```bash
+export VCPKG_FORK_TOKEN=ghp_...
+export RELEASE_VERSION=0.1.42
+bash scripts/sync-microsoft-vcpkg.sh
+```
 
 ### Release (automated)
 
