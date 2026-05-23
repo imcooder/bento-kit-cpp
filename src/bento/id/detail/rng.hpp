@@ -36,8 +36,7 @@ inline unsigned seedThreadRng() {
   } catch (...) {
   }
   const unsigned ms = static_cast<unsigned>(unixMillis() & 0xffffffffu);
-  const unsigned tid =
-      static_cast<unsigned>(std::hash<std::thread::id>{}(std::this_thread::get_id()) & 0xffffffffu);
+  const unsigned tid = static_cast<unsigned>(std::hash<std::thread::id>{}(std::this_thread::get_id()) & 0xffffffffu);
   return mixSeed(ms, tid);
 }
 
