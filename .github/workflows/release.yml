@@ -1,0 +1,341 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - "release_*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Build Configuration
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      branch: ${{ steps.meta.outputs.branch }}
+      build_time: ${{ steps.meta.outputs.build_time }}
+      pkg_name: ${{ steps.meta.outputs.pkg_name }}
+      release_url: ${{ steps.meta.outputs.release_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: meta
+        env:
+          CI: true
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          if [[ ! "$BRANCH" =~ ^release_[0-9]+\.[0-9]+$ ]]; then
+            echo "This workflow only runs on release_Major.Minor branches (e.g. release_0.1)."
+            echo "Current branch: $BRANCH"
+            exit 1
+          fi
+
+          export RELEASE_BRANCH="$BRANCH"
+          node scripts/check-release.mjs
+
+          VERSION="$(node scripts/resolve-version.mjs)"
+          TAG="v${VERSION}"
+          PKG_NAME="bento-kit-cpp-${VERSION}"
+          BUILD_TIME="$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          WORKFLOW_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "build_time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
+          echo "pkg_name=$PKG_NAME" >> "$GITHUB_OUTPUT"
+          echo "release_url=$RELEASE_URL" >> "$GITHUB_OUTPUT"
+
+          echo "## Build Configuration" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Setting | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | ${VERSION} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Release Tag | ${TAG} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | ${BRANCH} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Package | ${PKG_NAME}.tar.gz |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit | \`${GITHUB_SHA}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build Run | [${GITHUB_RUN_ID}](${WORKFLOW_URL}) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**[→ Release Page](${RELEASE_URL})**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> Release notes and assets will be finalized after all jobs complete." >> "$GITHUB_STEP_SUMMARY"
+
+  create-release:
+    name: Create Release
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Render initial release notes
+        id: notes
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_BRANCH: ${{ needs.validate.outputs.branch }}
+          BUILD_TIME: ${{ needs.validate.outputs.build_time }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          BODY="$(node scripts/render-release-notes.mjs initial)"
+          DELIM="notes_$(openssl rand -hex 8)"
+          echo "body<<${DELIM}" >> "$GITHUB_OUTPUT"
+          echo "$BODY" >> "$GITHUB_OUTPUT"
+          echo "${DELIM}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: bento-kit-cpp v${{ needs.validate.outputs.version }}
+          body: ${{ steps.notes.outputs.body }}
+          draft: false
+          make_latest: true
+
+  build-ubuntu:
+    name: Build Ubuntu
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm run ci
+        env:
+          CI: true
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+
+  build-macos:
+    name: Build macOS
+    needs: validate
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm run ci
+        env:
+          CI: true
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+
+  build-windows:
+    name: Build Windows
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm run ci
+        env:
+          CI: true
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+
+  publish-vcpkg:
+    name: Publish vcpkg Port
+    needs: [validate, create-release, build-ubuntu, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    outputs:
+      sha512: ${{ steps.hash.outputs.sha512 }}
+      port_commit: ${{ steps.port_commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download release tarball
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          curl -fsSL \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz" \
+            -o source.tar.gz
+
+      - name: Compute SHA512
+        id: hash
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg /tmp/vcpkg
+          bash /tmp/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+          SHA512="$(/tmp/vcpkg/vcpkg hash source.tar.gz)"
+          echo "sha512=$SHA512" >> "$GITHUB_OUTPUT"
+
+      - name: Update port files
+        run: |
+          node scripts/update-vcpkg-port.mjs \
+            "${{ needs.validate.outputs.version }}" \
+            "${{ steps.hash.outputs.sha512 }}"
+
+      - name: Commit port update
+        id: port_commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet -- ports/bento-kit-cpp/; then
+            echo "Port files already up to date."
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git add ports/bento-kit-cpp/
+          git commit -m "chore(vcpkg): release ${{ needs.validate.outputs.version }}"
+          git push
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  package:
+    name: Package & Upload
+    needs: [validate, create-release, build-ubuntu, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    outputs:
+      pkg_size: ${{ steps.package.outputs.size }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build install package
+        id: package
+        env:
+          CI: true
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          PKG_NAME="${{ needs.validate.outputs.pkg_name }}"
+          PREFIX="${GITHUB_WORKSPACE}/dist/${PKG_NAME}"
+
+          cmake --preset ci \
+            -DBENTO_KIT_VERSION="${VERSION}" \
+            -DBENTO_KIT_BUILD_TESTS=OFF \
+            -DBENTO_KIT_BUILD_EXAMPLES=OFF
+          cmake --build --preset ci
+          cmake --install output/build --prefix "${PREFIX}"
+
+          cp LICENSE "${PREFIX}/"
+          mkdir -p dist
+          tar -czf "dist/${PKG_NAME}.tar.gz" -C dist "${PKG_NAME}"
+
+          BYTES=$(wc -c < "dist/${PKG_NAME}.tar.gz" | tr -d ' ')
+          if [ "$BYTES" -lt 1048576 ]; then
+            SIZE="$(awk "BEGIN {printf \"%.1f KB\", $BYTES / 1024}")"
+          else
+            SIZE="$(awk "BEGIN {printf \"%.2f MB\", $BYTES / 1048576}")"
+          fi
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "Packaged dist/${PKG_NAME}.tar.gz ($SIZE)"
+
+      - name: Upload package to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          files: dist/${{ needs.validate.outputs.pkg_name }}.tar.gz
+
+  final-check:
+    name: Final Check
+    needs:
+      - validate
+      - create-release
+      - build-ubuntu
+      - build-macos
+      - build-windows
+      - publish-vcpkg
+      - package
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Summarize and update release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_BRANCH: ${{ needs.validate.outputs.branch }}
+          BUILD_TIME: ${{ needs.validate.outputs.build_time }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          BUILD_UBUNTU: ${{ needs.build-ubuntu.result }}
+          BUILD_MACOS: ${{ needs.build-macos.result }}
+          BUILD_WINDOWS: ${{ needs.build-windows.result }}
+          PKG_NAME: ${{ needs.validate.outputs.pkg_name }}
+          PKG_ASSET_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.validate.outputs.tag }}/${{ needs.validate.outputs.pkg_name }}.tar.gz
+          PKG_SIZE: ${{ needs.package.outputs.pkg_size }}
+          VCPKG_SHA512: ${{ needs.publish-vcpkg.outputs.sha512 }}
+          VCPKG_PORT_COMMIT: ${{ needs.publish-vcpkg.outputs.port_commit }}
+        run: |
+          FAILED=false
+          for RESULT in \
+            "${{ needs.validate.result }}" \
+            "${{ needs.create-release.result }}" \
+            "${{ needs.build-ubuntu.result }}" \
+            "${{ needs.build-macos.result }}" \
+            "${{ needs.build-windows.result }}" \
+            "${{ needs.publish-vcpkg.result }}" \
+            "${{ needs.package.result }}"; do
+            if [ "$RESULT" = "failure" ] || [ "$RESULT" = "cancelled" ]; then
+              FAILED=true
+            fi
+          done
+
+          echo "## Build Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Platform / Job | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Ubuntu | ${{ needs.build-ubuntu.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| macOS | ${{ needs.build-macos.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Windows | ${{ needs.build-windows.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| vcpkg port | ${{ needs.publish-vcpkg.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| package upload | ${{ needs.package.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**[→ Release Page](${{ needs.validate.outputs.release_url }})**" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$FAILED" = "true" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> One or more jobs failed. Release notes were not updated." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          BODY="$(node scripts/render-release-notes.mjs final)"
+          gh release edit "${{ needs.validate.outputs.tag }}" --repo "${{ github.repository }}" --notes "$BODY"
+          echo "Release notes updated."

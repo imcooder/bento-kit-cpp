@@ -40,6 +40,7 @@
 
 # Project output (binaries + CMake build tree)
 output/
+dist/
 
 # Legacy build dirs
 build/

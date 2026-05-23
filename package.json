@@ -16,7 +16,8 @@
     "test:ci": "ctest --preset ci --output-on-failure",
     "clean": "node scripts/clean.mjs",
     "dev": "npm run configure && npm run build && npm test",
-    "ci": "npm run configure:ci && npm run build:ci && npm run test:ci"
+    "ci": "npm run configure:ci && npm run build:ci && npm run test:ci",
+    "release:check": "node scripts/check-release.mjs"
   },
   "engines": {
     "node": ">=18"

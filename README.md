@@ -47,9 +47,9 @@ ports/         # vcpkg port
 | Context | Resolved version | Example |
 |---------|------------------|---------|
 | Local dev | `package.json` as-is | `0.1.0` |
-| CI build | `MAJOR.MINOR` from `package.json` + `GITHUB_RUN_NUMBER` as patch | `0.1.42` (run #42) |
+| CI / Release | `MAJOR.MINOR` from `package.json` + `GITHUB_RUN_NUMBER` as patch | `0.1.42` (run #42) |
 
-You bump **major** and **minor** manually in `package.json`. The **patch** segment is the GitHub Actions run number in CI (not edited by hand).
+You bump **major** and **minor** manually in `package.json`. The **patch** segment is the GitHub Actions run number in CI and release (not edited by hand).
 
 ```bash
 npm run version          # print resolved version for current environment
@@ -174,7 +174,24 @@ Port files live under `ports/bento-kit-cpp/`. Point a custom registry at this re
 { "dependencies": ["bento-kit-cpp"] }
 ```
 
-Update `REPO` and `SHA512` in `portfile.cmake` before publishing.
+### Release (automated)
+
+The **Build & Release** workflow (`.github/workflows/release.yml`) runs only on branches named `release_Major.Minor` (e.g. `release_0.1`). The **release version** uses the same rule as CI: `MAJOR.MINOR` from `package.json` + **`GITHUB_RUN_NUMBER`** as patch (e.g. run #42 → `0.1.42`, tag `v0.1.42`).
+
+1. Bump **major.minor** in `package.json` when needed (patch in `package.json` is ignored in CI/release).
+2. Create and push a release branch:
+
+```bash
+RELEASE_BRANCH=release_0.1 npm run release:check
+git checkout -b release_0.1
+git push -u origin release_0.1
+```
+
+3. The workflow creates a GitHub Release immediately (with build-in-progress notes), builds on ubuntu / macOS / Windows, uploads `bento-kit-cpp-0.1.<run>.tar.gz`, updates `ports/bento-kit-cpp/` on `main`, then **finalizes the Release page** with build results, download links, CMake/vcpkg integration docs, and port baseline info (similar to the terminal project's release layout).
+
+Re-run manually via **Actions -> Build & Release -> Run workflow** — select a `release_*` branch (not `main`).
+
+Consumers pin the vcpkg registry `baseline` to the `chore(vcpkg): release …` commit on `main`.
 
 ## Roadmap
 

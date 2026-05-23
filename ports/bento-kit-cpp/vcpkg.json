@@ -4,7 +4,7 @@
   "description": "Header-only C++ utilities: IDs, random helpers, log redaction",
   "homepage": "https://github.com/imcooder/bento-kit-cpp",
   "license": "MIT",
-  "supports": "windows & !uwp",
+  "supports": "!uwp",
   "dependencies": [
     {
       "name": "vcpkg-cmake",
