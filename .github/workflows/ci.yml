@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format-18
+
+      - name: npm run format
+        run: npm run format
+        env:
+          CLANG_FORMAT: clang-format-18
+
+  build:
+    name: build & test (${{ matrix.os }})
+    needs: format
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: npm run ci
+        run: npm run ci
+        env:
+          CI: true
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+
+  ci-success:
+    name: ci success
+    needs: [format, build]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Require CI to pass
+        run: |
+          if [ "${{ needs.format.result }}" != "success" ] || [ "${{ needs.build.result }}" != "success" ]; then
+            echo "CI failed: format=${{ needs.format.result }}, build=${{ needs.build.result }}"
+            exit 1
+          fi
+          echo "All CI jobs passed."
