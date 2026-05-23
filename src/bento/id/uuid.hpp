@@ -3,10 +3,12 @@
 #include <bento/id/detail/rng.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <random>
 #include <string>
+#include <thread>
 
 namespace bento::id {
 
@@ -98,11 +100,21 @@ public:
     {
       std::lock_guard<std::mutex> lock(m_mutex);
       ms = unixMillis() & 0xFFFFFFFFFFFFULL;
-      if (ms != m_lastMs) {
+      if (ms > m_lastMs) {
         m_lastMs = ms;
-        m_randA = static_cast<std::uint16_t>(std::uniform_int_distribution<int>(0, 0x0fff)(threadRng()));
+        m_randA = 0;
       } else {
-        m_randA = static_cast<std::uint16_t>((m_randA + 1) & 0x0fff);
+        ms = m_lastMs;
+        if (m_randA >= 0x0fff) {
+          do {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            ms = unixMillis() & 0xFFFFFFFFFFFFULL;
+          } while (ms <= m_lastMs);
+          m_lastMs = ms;
+          m_randA = 0;
+        } else {
+          ++m_randA;
+        }
       }
       randA = m_randA;
     }
