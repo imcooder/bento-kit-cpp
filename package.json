@@ -1,0 +1,24 @@
+{
+  "name": "bento-kit-cpp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Header-only C++ utility library",
+  "scripts": {
+    "version": "node scripts/resolve-version.mjs",
+    "format:check": "node scripts/format.mjs check",
+    "format:fix": "node scripts/format.mjs fix",
+    "format": "npm run format:check",
+    "configure": "node scripts/cmake-configure.mjs default",
+    "configure:ci": "node scripts/cmake-configure.mjs ci",
+    "build": "cmake --build --preset default",
+    "build:ci": "cmake --build --preset ci",
+    "test": "ctest --preset default --output-on-failure",
+    "test:ci": "ctest --preset ci --output-on-failure",
+    "clean": "node scripts/clean.mjs",
+    "dev": "npm run configure && npm run build && npm test",
+    "ci": "npm run configure:ci && npm run build:ci && npm run test:ci"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
