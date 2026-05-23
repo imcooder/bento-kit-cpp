@@ -6,7 +6,7 @@
  *   node scripts/render-release-notes.mjs final   > body.md
  */
 
-import { CMAKE_PACKAGE, PRODUCT, VCPKG_PORT, VCPKG_PORT_DIR, pkgArchiveName } from "./release-names.mjs";
+import { CMAKE_PACKAGE, PRODUCT, VCPKG_PORT, VCPKG_PORT_DIR, VCPKG_UPSTREAM_REPO, pkgArchiveName } from "./release-names.mjs";
 
 const mode = process.argv[2];
 if (mode !== "initial" && mode !== "final") {
@@ -146,9 +146,14 @@ The vcpkg port under \`${VCPKG_PORT_DIR}/\` will be updated on \`main\` after th
 function vcpkgSectionFinal() {
   const commit = opt("VCPKG_PORT_COMMIT");
   const sha512 = opt("VCPKG_SHA512");
+  const upstreamPr = opt("VCPKG_UPSTREAM_PR_URL", "");
   const version = req("RELEASE_VERSION");
   const shortHash = commit !== "—" ? commit.slice(0, 7) : "—";
   const shaShort = sha512 !== "—" && sha512.length > 32 ? `${sha512.slice(0, 32)}…` : sha512;
+  const upstreamPrRow =
+    upstreamPr && upstreamPr !== "—"
+      ? `| Upstream PR | [${VCPKG_UPSTREAM_REPO}](${upstreamPr}) |\n`
+      : "";
   return `## vcpkg Port
 
 | Field | Value |
@@ -157,7 +162,7 @@ function vcpkgSectionFinal() {
 | Port version | \`${version}\` |
 | Baseline commit | \`${commit}\` (${shortHash}) |
 | SHA512 | \`${shaShort}\` |
-
+${upstreamPrRow}
 Commit message on \`main\`: \`chore(vcpkg): release ${version}\``;
 }
 

@@ -236,12 +236,15 @@ jobs:
       needs.build-windows.result == 'success' &&
       needs.package.result == 'success'
     runs-on: ubuntu-latest
+    outputs:
+      pr_url: ${{ steps.sync.outputs.pr_url }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.publish-vcpkg.outputs.port_commit }}
 
       - name: Push port to vcpkg fork and update PR
+        id: sync
         env:
           VCPKG_FORK_TOKEN: ${{ secrets.VCPKG_FORK_TOKEN }}
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
@@ -337,6 +340,7 @@ jobs:
           PKG_SIZE: ${{ needs.package.outputs.pkg_size }}
           VCPKG_SHA512: ${{ needs.publish-vcpkg.outputs.sha512 }}
           VCPKG_PORT_COMMIT: ${{ needs.publish-vcpkg.outputs.port_commit }}
+          VCPKG_UPSTREAM_PR_URL: ${{ needs.sync-microsoft-vcpkg.outputs.pr_url }}
         run: |
           FAILED=false
           for RESULT in \
@@ -362,6 +366,10 @@ jobs:
           echo "| Windows | ${{ needs.build-windows.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| vcpkg port (this repo) | ${{ needs.publish-vcpkg.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| microsoft/vcpkg PR | ${{ needs.sync-microsoft-vcpkg.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ needs.sync-microsoft-vcpkg.outputs.pr_url }}" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**[→ microsoft/vcpkg PR](${{ needs.sync-microsoft-vcpkg.outputs.pr_url }})**" >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "| package upload | ${{ needs.package.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**[→ Release Page](${{ needs.validate.outputs.release_url }})**" >> "$GITHUB_STEP_SUMMARY"
