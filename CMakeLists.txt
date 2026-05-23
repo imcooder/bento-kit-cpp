@@ -32,6 +32,10 @@ target_include_directories(bento_kit INTERFACE
 )
 target_compile_features(bento_kit INTERFACE cxx_std_17)
 
+if(MSVC)
+  target_compile_options(bento_kit INTERFACE /utf-8)
+endif()
+
 include(GNUInstallDirs)
 
 install(TARGETS bento_kit EXPORT bento-kit-cppTargets)

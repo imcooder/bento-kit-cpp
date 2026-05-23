@@ -120,8 +120,12 @@ void testMaskSecretShort() {
 }
 
 void testMaskSecretSentinels() {
-  CHECK_EQ(bento::mask::maskSecret(std::nullopt, 3), "<none>");
-  CHECK_EQ(bento::mask::maskSecret("", 3), "<empty>");
+  CHECK_EQ(bento::mask::maskSecret(std::optional<std::string_view>{}, 3), "<none>");
+  CHECK_EQ(bento::mask::maskSecret(std::optional<std::string_view>(""), 3), "<empty>");
+#ifdef _WIN32
+  CHECK_EQ(bento::mask::maskSecret(std::optional<std::wstring_view>{}, 3), L"<none>");
+  CHECK_EQ(bento::mask::maskSecret(std::optional<std::wstring_view>(L""), 3), L"<empty>");
+#endif
 }
 
 void testMaskSecretKeepZero() {
@@ -129,8 +133,29 @@ void testMaskSecretKeepZero() {
 }
 
 void testMaskSecretUnicode() {
-  CHECK_EQ(bento::mask::maskSecret(bento::test::utf8CjkDigitsEight(), 2), bento::test::utf8CjkMaskSecretExpected());
+  const std::string input = bento::test::utf8CjkDigitsEight();
+  CHECK_EQ(bento::mask::maskSecret(std::optional<std::string_view>(input), 2), bento::test::utf8CjkMaskSecretExpected());
 }
+
+#ifdef _WIN32
+
+void testMaskSecretUnicodeWide() {
+  CHECK_EQ(bento::mask::maskSecret(bento::test::utf16CjkDigitsEightWide(), 2), bento::test::utf16CjkMaskSecretExpectedWide());
+}
+
+void testMaskNameTwoCharsWide() {
+  CHECK_EQ(bento::mask::maskName(bento::test::utf16CjkNameTwoWide()), bento::test::utf16CjkNameTwoMaskedWide());
+}
+
+void testMaskMiddleUnicodeWide() {
+  CHECK_EQ(bento::mask::maskMiddle(bento::test::utf16CjkDigitsFiveWide(), 1, 1), bento::test::utf16CjkMaskMiddleExpectedWide());
+}
+
+void testMaskPhoneWide() {
+  CHECK_EQ(bento::mask::maskPhone(L"13812345678"), L"138****5678");
+}
+
+#endif
 
 using TestFn = void (*)();
 
@@ -169,6 +194,12 @@ int main() {
       {"maskSecret sentinels", testMaskSecretSentinels},
       {"maskSecret keep zero", testMaskSecretKeepZero},
       {"maskSecret unicode", testMaskSecretUnicode},
+#ifdef _WIN32
+      {"maskSecret unicode wide", testMaskSecretUnicodeWide},
+      {"maskName two chars wide", testMaskNameTwoCharsWide},
+      {"maskMiddle unicode wide", testMaskMiddleUnicodeWide},
+      {"maskPhone wide", testMaskPhoneWide},
+#endif
   };
 
   for (const auto &testCase : tests) {

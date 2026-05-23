@@ -11,6 +11,11 @@ namespace bento::mask {
 inline std::string maskMiddle(std::string_view s, std::size_t prefix, std::size_t suffix);
 inline std::string maskSecret(std::optional<std::string_view> value, std::size_t keepChars = 3);
 
+#ifdef _WIN32
+inline std::wstring maskMiddle(std::wstring_view s, std::size_t prefix, std::size_t suffix);
+inline std::wstring maskSecret(std::optional<std::wstring_view> value, std::size_t keepChars = 3);
+#endif
+
 namespace detail {
 
 inline constexpr char kMaskChar = '*';
@@ -19,88 +24,110 @@ inline std::string starString(std::size_t count) {
   return std::string(count, kMaskChar);
 }
 
-inline void appendUtf8(std::string &out, char32_t cp) {
-  if (cp <= 0x7F) {
-    out.push_back(static_cast<char>(cp));
-  } else if (cp <= 0x7FF) {
-    out.push_back(static_cast<char>(0xC0 | ((cp >> 6) & 0x1F)));
-    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-  } else if (cp <= 0xFFFF) {
-    out.push_back(static_cast<char>(0xE0 | ((cp >> 12) & 0x0F)));
-    out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-  } else {
-    out.push_back(static_cast<char>(0xF0 | ((cp >> 18) & 0x07)));
-    out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
-    out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-  }
-}
-
-inline std::vector<char32_t> utf8ToChars(std::string_view s) {
-  std::vector<char32_t> chars;
-  chars.reserve(s.size());
-  for (std::size_t i = 0; i < s.size();) {
-    const auto b0 = static_cast<unsigned char>(s[i]);
-    if (b0 < 0x80) {
-      chars.push_back(b0);
-      ++i;
-      continue;
-    }
-    if ((b0 & 0xE0) == 0xC0 && i + 1 < s.size()) {
-      const auto b1 = static_cast<unsigned char>(s[i + 1]);
-      if ((b1 & 0xC0) == 0x80) {
-        chars.push_back(((b0 & 0x1F) << 6) | (b1 & 0x3F));
-        i += 2;
-        continue;
-      }
-    }
-    if ((b0 & 0xF0) == 0xE0 && i + 2 < s.size()) {
-      const auto b1 = static_cast<unsigned char>(s[i + 1]);
-      const auto b2 = static_cast<unsigned char>(s[i + 2]);
-      if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80) {
-        chars.push_back(((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F));
-        i += 3;
-        continue;
-      }
-    }
-    if ((b0 & 0xF8) == 0xF0 && i + 3 < s.size()) {
-      const auto b1 = static_cast<unsigned char>(s[i + 1]);
-      const auto b2 = static_cast<unsigned char>(s[i + 2]);
-      const auto b3 = static_cast<unsigned char>(s[i + 3]);
-      if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80 && (b3 & 0xC0) == 0x80) {
-        chars.push_back(((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F));
-        i += 4;
-        continue;
-      }
-    }
-    chars.push_back(U'\uFFFD');
-    ++i;
-  }
-  return chars;
-}
-
-inline std::string charsToUtf8(const std::vector<char32_t> &chars) {
-  std::string out;
-  out.reserve(chars.size() * 3);
-  for (char32_t cp : chars) {
-    appendUtf8(out, cp);
-  }
-  return out;
-}
-
-inline std::string charsRangeToUtf8(const std::vector<char32_t> &chars, std::size_t begin, std::size_t end) {
-  std::string out;
-  out.reserve((end - begin) * 3);
-  for (std::size_t i = begin; i < end; ++i) {
-    appendUtf8(out, chars[i]);
-  }
-  return out;
-}
-
 inline bool isAsciiDigit(char ch) {
   return ch >= '0' && ch <= '9';
 }
+
+inline std::size_t utf8CharByteLength(std::string_view s, std::size_t index) {
+  if (index >= s.size()) {
+    return 0;
+  }
+  const auto b0 = static_cast<unsigned char>(s[index]);
+  if (b0 < 0x80) {
+    return 1;
+  }
+  if ((b0 & 0xE0) == 0xC0 && index + 1 < s.size()) {
+    const auto b1 = static_cast<unsigned char>(s[index + 1]);
+    if ((b1 & 0xC0) == 0x80) {
+      return 2;
+    }
+  }
+  if ((b0 & 0xF0) == 0xE0 && index + 2 < s.size()) {
+    const auto b1 = static_cast<unsigned char>(s[index + 1]);
+    const auto b2 = static_cast<unsigned char>(s[index + 2]);
+    if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80) {
+      return 3;
+    }
+  }
+  if ((b0 & 0xF8) == 0xF0 && index + 3 < s.size()) {
+    const auto b1 = static_cast<unsigned char>(s[index + 1]);
+    const auto b2 = static_cast<unsigned char>(s[index + 2]);
+    const auto b3 = static_cast<unsigned char>(s[index + 3]);
+    if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80 && (b3 & 0xC0) == 0x80) {
+      return 4;
+    }
+  }
+  return 1;
+}
+
+inline std::vector<std::size_t> utf8CharStarts(std::string_view s) {
+  std::vector<std::size_t> starts;
+  starts.reserve(s.size() / 2 + 2);
+  for (std::size_t i = 0; i < s.size();) {
+    starts.push_back(i);
+    i += utf8CharByteLength(s, i);
+  }
+  starts.push_back(s.size());
+  return starts;
+}
+
+inline std::size_t utf8CharCount(std::string_view s) {
+  std::size_t count = 0;
+  for (std::size_t i = 0; i < s.size();) {
+    ++count;
+    i += utf8CharByteLength(s, i);
+  }
+  return count;
+}
+
+#ifdef _WIN32
+
+inline constexpr wchar_t kMaskWChar = L'*';
+
+inline std::wstring starWString(std::size_t count) {
+  return std::wstring(count, kMaskWChar);
+}
+
+inline bool isWideDigit(wchar_t ch) {
+  return ch >= L'0' && ch <= L'9';
+}
+
+/// UTF-16 code-unit length for one Unicode scalar on Windows (`wchar_t` is UTF-16).
+inline std::size_t utf16CharUnitLength(std::wstring_view s, std::size_t index) {
+  if (index >= s.size()) {
+    return 0;
+  }
+  const wchar_t w0 = s[index];
+  if (w0 >= 0xD800 && w0 <= 0xDBFF && index + 1 < s.size()) {
+    const wchar_t w1 = s[index + 1];
+    if (w1 >= 0xDC00 && w1 <= 0xDFFF) {
+      return 2;
+    }
+  }
+  return 1;
+}
+
+inline std::vector<std::size_t> utf16CharStarts(std::wstring_view s) {
+  std::vector<std::size_t> starts;
+  starts.reserve(s.size() / 2 + 2);
+  for (std::size_t i = 0; i < s.size();) {
+    starts.push_back(i);
+    i += utf16CharUnitLength(s, i);
+  }
+  starts.push_back(s.size());
+  return starts;
+}
+
+inline std::size_t utf16CharCount(std::wstring_view s) {
+  std::size_t count = 0;
+  for (std::size_t i = 0; i < s.size();) {
+    ++count;
+    i += utf16CharUnitLength(s, i);
+  }
+  return count;
+}
+
+#endif // _WIN32
 
 } // namespace detail
 
@@ -136,10 +163,9 @@ inline std::string maskEmail(std::string_view email) {
   if (local.empty()) {
     return std::string(email);
   }
-  const std::vector<char32_t> chars = detail::utf8ToChars(local);
   std::string out;
   out.reserve(email.size() + 4);
-  detail::appendUtf8(out, chars.front());
+  out.append(local.substr(0, detail::utf8CharByteLength(local, 0)));
   out.append("***");
   out.append(email.substr(at));
   return out;
@@ -147,8 +173,7 @@ inline std::string maskEmail(std::string_view email) {
 
 /// Mask a national ID card number (15 or 18 characters).
 inline std::string maskIdCard(std::string_view id) {
-  const auto chars = detail::utf8ToChars(id);
-  const std::size_t len = chars.size();
+  const std::size_t len = detail::utf8CharCount(id);
   if (len != 15 && len != 18) {
     return maskMiddle(id, 1, 1);
   }
@@ -157,7 +182,7 @@ inline std::string maskIdCard(std::string_view id) {
 
 /// Mask a bank card number, keeping the first 4 and last 4 characters.
 inline std::string maskBankCard(std::string_view card) {
-  if (detail::utf8ToChars(card).size() < 9) {
+  if (detail::utf8CharCount(card) < 9) {
     return maskMiddle(card, 1, 1);
   }
   return maskMiddle(card, 4, 4);
@@ -165,7 +190,7 @@ inline std::string maskBankCard(std::string_view card) {
 
 /// Mask an API token / secret (first 4 + last 4, or all stars if short).
 inline std::string maskToken(std::string_view token) {
-  const std::size_t len = detail::utf8ToChars(token).size();
+  const std::size_t len = detail::utf8CharCount(token);
   if (len < 9) {
     return detail::starString(len);
   }
@@ -174,22 +199,23 @@ inline std::string maskToken(std::string_view token) {
 
 /// Mask a CJK personal name (1 char unchanged, 2 -> first+*, 3+ -> first+stars+last).
 inline std::string maskName(std::string_view name) {
-  const auto chars = detail::utf8ToChars(name);
-  switch (chars.size()) {
+  const auto starts = detail::utf8CharStarts(name);
+  const std::size_t charCount = starts.size() - 1;
+  switch (charCount) {
   case 0:
   case 1:
     return std::string(name);
   case 2: {
     std::string out;
-    detail::appendUtf8(out, chars[0]);
+    out.append(name.substr(0, detail::utf8CharByteLength(name, 0)));
     out.push_back(detail::kMaskChar);
     return out;
   }
   default: {
     std::string out;
-    detail::appendUtf8(out, chars.front());
-    out.append(detail::starString(chars.size() - 2));
-    detail::appendUtf8(out, chars.back());
+    out.append(name.substr(0, detail::utf8CharByteLength(name, 0)));
+    out.append(detail::starString(charCount - 2));
+    out.append(name.substr(starts[charCount - 1]));
     return out;
   }
   }
@@ -203,32 +229,154 @@ inline std::string maskSecret(std::optional<std::string_view> value, std::size_t
   if (value->empty()) {
     return "<empty>";
   }
-  const auto chars = detail::utf8ToChars(*value);
-  const std::size_t len = chars.size();
+  const auto starts = detail::utf8CharStarts(*value);
+  const std::size_t len = starts.size() - 1;
   if (len <= keepChars * 2) {
     return std::string(*value);
   }
   std::string out;
-  out.reserve(len * 3 + 3);
-  out.append(detail::charsRangeToUtf8(chars, 0, keepChars));
+  out.reserve(value->size() + 3);
+  out.append(value->substr(0, starts[keepChars]));
   out.append("***");
-  out.append(detail::charsRangeToUtf8(chars, len - keepChars, len));
+  out.append(value->substr(starts[len - keepChars]));
   return out;
 }
 
 /// Keep `prefix` / `suffix` Unicode chars; star the middle (one star per char).
 inline std::string maskMiddle(std::string_view s, std::size_t prefix, std::size_t suffix) {
-  const auto chars = detail::utf8ToChars(s);
-  const std::size_t total = chars.size();
+  const auto starts = detail::utf8CharStarts(s);
+  const std::size_t total = starts.size() - 1;
   if (total <= prefix + suffix) {
     return detail::starString(total);
   }
   std::string out;
-  out.reserve(total * 3);
-  out.append(detail::charsRangeToUtf8(chars, 0, prefix));
+  out.reserve(s.size());
+  out.append(s.substr(0, starts[prefix]));
   out.append(detail::starString(total - prefix - suffix));
-  out.append(detail::charsRangeToUtf8(chars, total - suffix, total));
+  out.append(s.substr(starts[total - suffix]));
   return out;
 }
+
+#ifdef _WIN32
+
+inline std::wstring maskPhone(std::wstring_view phone) {
+  if (phone.size() == 11) {
+    bool allDigits = true;
+    for (wchar_t ch : phone) {
+      if (!detail::isWideDigit(ch)) {
+        allDigits = false;
+        break;
+      }
+    }
+    if (allDigits) {
+      std::wstring out;
+      out.reserve(11);
+      out.append(phone.substr(0, 3));
+      out.append(L"****");
+      out.append(phone.substr(7));
+      return out;
+    }
+  }
+  return maskMiddle(phone, 1, 1);
+}
+
+inline std::wstring maskEmail(std::wstring_view email) {
+  const std::size_t at = email.find(L'@');
+  if (at == std::wstring_view::npos) {
+    return maskMiddle(email, 1, 0);
+  }
+  const std::wstring_view local = email.substr(0, at);
+  if (local.empty()) {
+    return std::wstring(email);
+  }
+  std::wstring out;
+  out.reserve(email.size() + 4);
+  out.append(local.substr(0, detail::utf16CharUnitLength(local, 0)));
+  out.append(L"***");
+  out.append(email.substr(at));
+  return out;
+}
+
+inline std::wstring maskIdCard(std::wstring_view id) {
+  const std::size_t len = detail::utf16CharCount(id);
+  if (len != 15 && len != 18) {
+    return maskMiddle(id, 1, 1);
+  }
+  return maskMiddle(id, 6, 4);
+}
+
+inline std::wstring maskBankCard(std::wstring_view card) {
+  if (detail::utf16CharCount(card) < 9) {
+    return maskMiddle(card, 1, 1);
+  }
+  return maskMiddle(card, 4, 4);
+}
+
+inline std::wstring maskToken(std::wstring_view token) {
+  const std::size_t len = detail::utf16CharCount(token);
+  if (len < 9) {
+    return detail::starWString(len);
+  }
+  return maskMiddle(token, 4, 4);
+}
+
+inline std::wstring maskName(std::wstring_view name) {
+  const auto starts = detail::utf16CharStarts(name);
+  const std::size_t charCount = starts.size() - 1;
+  switch (charCount) {
+  case 0:
+  case 1:
+    return std::wstring(name);
+  case 2: {
+    std::wstring out;
+    out.append(name.substr(0, detail::utf16CharUnitLength(name, 0)));
+    out.push_back(detail::kMaskWChar);
+    return out;
+  }
+  default: {
+    std::wstring out;
+    out.append(name.substr(0, detail::utf16CharUnitLength(name, 0)));
+    out.append(detail::starWString(charCount - 2));
+    out.append(name.substr(starts[charCount - 1]));
+    return out;
+  }
+  }
+}
+
+inline std::wstring maskSecret(std::optional<std::wstring_view> value, std::size_t keepChars) {
+  if (!value.has_value()) {
+    return L"<none>";
+  }
+  if (value->empty()) {
+    return L"<empty>";
+  }
+  const auto starts = detail::utf16CharStarts(*value);
+  const std::size_t len = starts.size() - 1;
+  if (len <= keepChars * 2) {
+    return std::wstring(*value);
+  }
+  std::wstring out;
+  out.reserve(value->size() + 3);
+  out.append(value->substr(0, starts[keepChars]));
+  out.append(L"***");
+  out.append(value->substr(starts[len - keepChars]));
+  return out;
+}
+
+inline std::wstring maskMiddle(std::wstring_view s, std::size_t prefix, std::size_t suffix) {
+  const auto starts = detail::utf16CharStarts(s);
+  const std::size_t total = starts.size() - 1;
+  if (total <= prefix + suffix) {
+    return detail::starWString(total);
+  }
+  std::wstring out;
+  out.reserve(s.size());
+  out.append(s.substr(0, starts[prefix]));
+  out.append(detail::starWString(total - prefix - suffix));
+  out.append(s.substr(starts[total - suffix]));
+  return out;
+}
+
+#endif // _WIN32
 
 } // namespace bento::mask
